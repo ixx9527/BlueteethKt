@@ -6,4 +6,6 @@
 /build
 /captures
 /gradle
+gradlew
+gradlew.bat
 .externalNativeBuild
