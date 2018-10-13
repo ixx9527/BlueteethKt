@@ -69,6 +69,10 @@ class MediaPlaybackService : MediaBrowserService(), Playback.Callback {
     override fun onLoadChildren(parentMediaId: String, result: Result<MutableList<MediaBrowser.MediaItem>>) {
         Log.v(TAG, "onGetRoot, parentMediaId = $parentMediaId, result = $result")
         // 根据访问权限返回播放列表相关信息
+        if (parentMediaId == null) {
+            result.sendResult(null)
+            return
+        }
     }
 
     inner class MediaSessionCallback : MediaSession.Callback() {

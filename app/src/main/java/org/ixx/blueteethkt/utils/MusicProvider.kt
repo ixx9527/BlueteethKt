@@ -14,6 +14,7 @@ import android.R.attr.path
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
+import android.os.AsyncTask
 import org.ixx.blueteethkt.MusicUtils
 import org.ixx.blueteethkt.R
 import java.util.concurrent.ConcurrentHashMap
@@ -43,14 +44,60 @@ class MusicProvider(val context: Context) {
     // Artist Name --> Map of (album name --> album metadata)
     private val mArtistAlbumDb: ConcurrentMap<String, Map<String, MediaMetadata>> = ConcurrentHashMap()
 
+    internal enum class State {
+        NON_INITIALIZED, INITIALIZING, INITIALIZED
+    }
+
+    @Volatile
+    private var mCurrentState = State.NON_INITIALIZED
+
+    val isInitialized: Boolean
+        get() = mCurrentState == State.INITIALIZED
 
     /**
      * Return the MediaMetadata for the given musicID.
      *
      * @param musicId The unique, non-hierarchical music ID.
      */
-    fun getMusicById(musicId: Long): Song {
-        TODO("return test file")
+    fun getMusicById(musicId: Long): Song? {
+        return mMusicListById[musicId] ?: null
+    }
+
+    interface MusicProviderCallback {
+        fun onMusicCatalogReady(success: Boolean)
+    }
+
+    /**
+     * Get the list of music tracks from disk and caches the track information
+     * for future reference, keying tracks by musicId and grouping by genre.
+     */
+    fun retrieveMediaAsync(callback: MusicProviderCallback?) {
+        Log.d(TAG, "retrieveMediaAsync called")
+        if (mCurrentState == State.INITIALIZED) {
+            // Nothing to do, execute callback immediately
+            callback?.onMusicCatalogReady(true)
+            return
+        }
+
+        // Asynchronously load the music catalog in a separate thread
+        object : AsyncTask<Void, Void, State>() {
+            override fun doInBackground(vararg params: Void?): State {
+                if (mCurrentState == State.INITIALIZED) {
+                    return mCurrentState
+                }
+                mCurrentState = State.INITIALIZING
+                if (retrieveMedia()) {
+                    mCurrentState = State.INITIALIZED
+                } else {
+                    mCurrentState = State.NON_INITIALIZED
+                }
+                return mCurrentState
+            }
+
+            override fun onPostExecute(current: State) {
+                callback?.onMusicCatalogReady(current == State.INITIALIZED)
+            }
+        }.execute()
     }
 
     @Synchronized
