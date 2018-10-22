@@ -1,22 +1,18 @@
 package org.ixx.blueteethkt.utils
 
 import android.Manifest
-import android.R.attr.allowBackup
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.MediaMetadata
-import android.media.MediaMetadataRetriever
-import android.net.Uri
-import android.support.v4.content.ContextCompat
-import android.util.Log
-import java.io.File
-import android.R.attr.path
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
+import android.media.MediaMetadata
+import android.media.MediaMetadataRetriever
 import android.os.AsyncTask
+import android.support.v4.content.ContextCompat
+import android.util.Log
 import org.ixx.blueteethkt.MusicUtils
-import org.ixx.blueteethkt.R
+import java.io.File
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 
@@ -54,6 +50,34 @@ class MusicProvider(val context: Context) {
     val isInitialized: Boolean
         get() = mCurrentState == State.INITIALIZED
 
+    fun getMusicList(): Iterable<MediaMetadata> {
+        return mMusicList
+    }
+
+    /**
+     * Get albums of a certain artist
+     *
+     */
+    fun getAlbumByArtist(artist: String): Iterable<MediaMetadata> {
+        TODO("还没想好")
+    }
+
+    /**
+     * Get music tracks of the given album
+     *
+     */
+    fun getMusicsByAlbum(album: String): Iterable<MediaMetadata> {
+        TODO("还没想好")
+    }
+
+    /**
+     * Get music tracks of the given playlist
+     *
+     */
+    fun getMusicsByPlaylist(playlist: String): Iterable<MediaMetadata> {
+        TODO("还没想好")
+    }
+
     /**
      * Return the MediaMetadata for the given musicID.
      *
@@ -63,19 +87,55 @@ class MusicProvider(val context: Context) {
         return mMusicListById[musicId] ?: null
     }
 
-    interface MusicProviderCallback {
-        fun onMusicCatalogReady(success: Boolean)
+    /**
+     * Get an iterator over the list of artists
+     *
+     * @return list of artists
+     */
+    fun getArtists(): Iterable<String> {
+        if (mCurrentState != State.INITIALIZED) {
+            return Collections.emptyList()
+        }
+        return mArtistAlbumDb.keys
+    }
+
+    /**
+     * Get an iterator over the list of albums
+     *
+     * @return list of albums
+     */
+    fun getAlbums(): Iterable<MediaMetadata> {
+        if (mCurrentState != State.INITIALIZED) {
+            return Collections.emptyList()
+        }
+        val albumList = arrayListOf<MediaMetadata>()
+        for (artist_albums in mArtistAlbumDb.values) {
+            albumList.addAll(artist_albums.values)
+        }
+        return albumList
+    }
+
+    /**
+     * Get an iterator over the list of playlists
+     *
+     * @return list of playlists
+     */
+    fun getPlaylists(): Iterable<String> {
+        if (mCurrentState != State.INITIALIZED) {
+            return Collections.emptyList()
+        }
+        return mMusicListByPlaylist.keys
     }
 
     /**
      * Get the list of music tracks from disk and caches the track information
      * for future reference, keying tracks by musicId and grouping by genre.
      */
-    fun retrieveMediaAsync(callback: MusicProviderCallback?) {
+    fun retrieveMediaAsync(callback: (success: Boolean) -> Unit) {
         Log.d(TAG, "retrieveMediaAsync called")
         if (mCurrentState == State.INITIALIZED) {
             // Nothing to do, execute callback immediately
-            callback?.onMusicCatalogReady(true)
+            callback.invoke(true)
             return
         }
 
@@ -95,7 +155,7 @@ class MusicProvider(val context: Context) {
             }
 
             override fun onPostExecute(current: State) {
-                callback?.onMusicCatalogReady(current == State.INITIALIZED)
+                callback.invoke(current == State.INITIALIZED)
             }
         }.execute()
     }
