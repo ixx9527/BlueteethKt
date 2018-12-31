@@ -1,46 +1,48 @@
 package org.ixx.blueteethkt.utils
 
-import android.Manifest
+import android.Manifest.permission.READ_EXTERNAL_STORAGE
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadata
 import android.media.MediaMetadataRetriever
-import android.os.AsyncTask
-import android.support.v4.content.ContextCompat
 import android.util.Log
 import org.ixx.blueteethkt.MusicUtils
+import org.jetbrains.anko.doAsync
+import org.jetbrains.anko.uiThread
 import java.io.File
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 
 
-class MusicProvider(val context: Context) {
+class MusicProvider(val mContext: Context) {
     private val TAG = LogHelper.makeLogTag(MusicProvider::class.java)
 
     companion object {
         // Public constants
-        const val UNKOWN = "UNKNOWN"
+        const val UNKNOWN = "UNKNOWN"
         // Uri source of this track
         const val CUSTOM_METADATA_TRACK_SOURCE = "__SOURCE__"
         // Sort key for this tack
         const val CUSTOM_METADATA_SORT_KEY = "__SORT_KEY__"
     }
 
-    private val mMusicList: MutableList<MediaMetadata> = arrayListOf()
-    private val mMusicListById: ConcurrentMap<Long, Song> = ConcurrentHashMap()
-    private val mMusicListByMediaId: ConcurrentMap<String, Song> = ConcurrentHashMap()
-
     // Album Name --> list of Metadata
     private val mMusicListByAlbum: ConcurrentMap<String, MutableList<MediaMetadata>> = ConcurrentHashMap()
     // Playlist Name --> list of Metadata
     private val mMusicListByPlaylist: ConcurrentMap<String, MutableList<MediaMetadata>> = ConcurrentHashMap()
     // Artist Name --> Map of (album name --> album metadata)
-    private val mArtistAlbumDb: ConcurrentMap<String, Map<String, MediaMetadata>> = ConcurrentHashMap()
+    private val mArtistAlbumDb: ConcurrentMap<String, ConcurrentHashMap<String, MediaMetadata>> = ConcurrentHashMap()
 
-    internal enum class State {
+    // Property
+    val mMusicList: MutableList<MediaMetadata> = arrayListOf()
+
+    private val mMusicListById: ConcurrentMap<Long, Song> = ConcurrentHashMap()
+    private val mMusicListByMediaId: ConcurrentMap<String, Song> = ConcurrentHashMap()
+
+    enum class State {
         NON_INITIALIZED, INITIALIZING, INITIALIZED
     }
 
@@ -50,41 +52,8 @@ class MusicProvider(val context: Context) {
     val isInitialized: Boolean
         get() = mCurrentState == State.INITIALIZED
 
-    fun getMusicList(): Iterable<MediaMetadata> {
-        return mMusicList
-    }
-
-    /**
-     * Get albums of a certain artist
-     *
-     */
-    fun getAlbumByArtist(artist: String): Iterable<MediaMetadata> {
-        TODO("还没想好")
-    }
-
-    /**
-     * Get music tracks of the given album
-     *
-     */
-    fun getMusicsByAlbum(album: String): Iterable<MediaMetadata> {
-        TODO("还没想好")
-    }
-
-    /**
-     * Get music tracks of the given playlist
-     *
-     */
-    fun getMusicsByPlaylist(playlist: String): Iterable<MediaMetadata> {
-        TODO("还没想好")
-    }
-
-    /**
-     * Return the MediaMetadata for the given musicID.
-     *
-     * @param musicId The unique, non-hierarchical music ID.
-     */
-    fun getMusicById(musicId: Long): Song? {
-        return mMusicListById[musicId] ?: null
+    init {
+        mMusicListByPlaylist.put(MediaIDHelper.MEDIA_ID_NOW_PLAYING, arrayListOf())
     }
 
     /**
@@ -93,26 +62,22 @@ class MusicProvider(val context: Context) {
      * @return list of artists
      */
     fun getArtists(): Iterable<String> {
-        if (mCurrentState != State.INITIALIZED) {
-            return Collections.emptyList()
-        }
-        return mArtistAlbumDb.keys
+        return if (isInitialized) mArtistAlbumDb.keys else Collections.emptyList()
     }
 
     /**
      * Get an iterator over the list of albums
      *
-     * @return list of albums
+     * @ return list of albums
      */
     fun getAlbums(): Iterable<MediaMetadata> {
-        if (mCurrentState != State.INITIALIZED) {
-            return Collections.emptyList()
-        }
-        val albumList = arrayListOf<MediaMetadata>()
-        for (artist_albums in mArtistAlbumDb.values) {
-            albumList.addAll(artist_albums.values)
-        }
-        return albumList
+        return if (isInitialized) {
+            val albumList: ArrayList<MediaMetadata> = arrayListOf()
+            for (artist_albums in mArtistAlbumDb.values) {
+                albumList.addAll(artist_albums.values)
+            }
+            albumList
+        } else Collections.emptyList()
     }
 
     /**
@@ -121,29 +86,89 @@ class MusicProvider(val context: Context) {
      * @return list of playlists
      */
     fun getPlaylists(): Iterable<String> {
-        if (mCurrentState != State.INITIALIZED) {
-            return Collections.emptyList()
-        }
-        return mMusicListByPlaylist.keys
+        return if (isInitialized) mMusicListByPlaylist.keys else Collections.emptyList()
+    }
+
+    /**
+     * Get albums of a certain artist
+     *
+     */
+    fun getAlbumByArtist(artist: String): Iterable<MediaMetadata> {
+        return if (isInitialized) mArtistAlbumDb[artist]?.values
+                ?: Collections.emptyList() else Collections.emptyList()
+    }
+
+    /**
+     * Get music tracks of the given album
+     *
+     */
+    fun getMusicsByAlbum(album: String): Iterable<MediaMetadata> {
+        return if (isInitialized) mMusicListByAlbum[album]
+                ?: Collections.emptyList() else Collections.emptyList()
+    }
+
+    /**
+     * Get music tracks of the given playlist
+     *
+     */
+    fun getMusicsByPlaylist(playlist: String): Iterable<MediaMetadata> {
+        return if (isInitialized) mMusicListByPlaylist[playlist]
+                ?: Collections.emptyList() else Collections.emptyList()
+    }
+
+    /**
+     * Return the MediaMetadata for the given musicID.
+     *
+     * @param musicId The unique, non-hierarchical music ID.
+     */
+    fun getMusicById(musicId: Long): Song? {
+        return mMusicListById[musicId]
+    }
+
+    /**
+     * Return the MediaMetadata for the given musicID.
+     *
+     * @param musicId The unique, non-hierarchical music ID.
+     */
+    fun getMusicByMediaId(musicId: String): Song? {
+        return mMusicListByMediaId[musicId]
+    }
+
+    /**
+     * Very basic implementation of a search that filter music tracks which title containing
+     * the given query.
+     *
+     */
+    fun searchMusic(titleQuery: String): Iterable<MediaMetadata> {
+        return if (isInitialized) {
+            val result: ArrayList<MediaMetadata> = arrayListOf()
+            val titleQueryInLowerCase = titleQuery.toLowerCase()
+            for (song in mMusicListByMediaId.values) {
+                if (song.metadata
+                                .getString(MediaMetadata.METADATA_KEY_TITLE)
+                                .toLowerCase()
+                                .contains(titleQueryInLowerCase)) {
+                    result.add(song.metadata)
+                }
+            }
+            result
+        } else Collections.emptyList()
     }
 
     /**
      * Get the list of music tracks from disk and caches the track information
      * for future reference, keying tracks by musicId and grouping by genre.
      */
-    fun retrieveMediaAsync(callback: (success: Boolean) -> Unit) {
+    fun retrieveMediaAsync(callback: (Boolean) -> Unit) {
         Log.d(TAG, "retrieveMediaAsync called")
-        if (mCurrentState == State.INITIALIZED) {
+        if (isInitialized) {
             // Nothing to do, execute callback immediately
             callback.invoke(true)
-            return
-        }
-
-        // Asynchronously load the music catalog in a separate thread
-        object : AsyncTask<Void, Void, State>() {
-            override fun doInBackground(vararg params: Void?): State {
-                if (mCurrentState == State.INITIALIZED) {
-                    return mCurrentState
+        } else {
+            // Asynchronously load the music catalog in a separate thread
+            doAsync {
+                if (isInitialized) {
+                    return@doAsync
                 }
                 mCurrentState = State.INITIALIZING
                 if (retrieveMedia()) {
@@ -151,18 +176,16 @@ class MusicProvider(val context: Context) {
                 } else {
                     mCurrentState = State.NON_INITIALIZED
                 }
-                return mCurrentState
+                uiThread {
+                    callback.invoke(isInitialized)
+                }
             }
-
-            override fun onPostExecute(current: State) {
-                callback.invoke(current == State.INITIALIZED)
-            }
-        }.execute()
+        }
     }
 
     @Synchronized
-    private fun retrieveMedia(): Boolean {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE)
+    fun retrieveMedia(): Boolean {
+        if (mContext.checkSelfPermission(READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
             return false
         }
@@ -212,15 +235,16 @@ class MusicProvider(val context: Context) {
         val metadataBuilder = MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, musicId.toString())
                 .putString(MediaMetadata.METADATA_KEY_MEDIA_URI, musicPath)
-                .putString(MediaMetadata.METADATA_KEY_TITLE, title ?: UNKOWN)
-                .putString(MediaMetadata.METADATA_KEY_ALBUM, album ?: UNKOWN)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, artist ?: UNKOWN)
+                .putString(MediaMetadata.METADATA_KEY_TITLE, title ?: UNKNOWN)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, album ?: UNKNOWN)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, artist ?: UNKNOWN)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
         // Retrieve album art
         val albumArtData = retriever.embeddedPicture
         if (retriever.embeddedPicture != null) {
             var bitmap = BitmapFactory.decodeByteArray(albumArtData, 0, albumArtData.size)
             bitmap = MusicUtils.resizeBitmap(bitmap, getDefaultAlbumArt())
+            metadataBuilder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
         }
         retriever.release()
         return metadataBuilder.build()
@@ -231,10 +255,7 @@ class MusicProvider(val context: Context) {
     }
 
     private fun addMusicToAlbumList(metadata: MediaMetadata) {
-        var thisAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)
-        if (thisAlbum == null) {
-            thisAlbum = UNKOWN
-        }
+        var thisAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: UNKNOWN
         if (!mMusicListByAlbum.containsKey(thisAlbum)) {
             mMusicListByAlbum[thisAlbum] = arrayListOf()
         }
@@ -242,18 +263,6 @@ class MusicProvider(val context: Context) {
     }
 
     private fun addMusicToArtistList(metadata: MediaMetadata) {
-        var thisArtist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
-        if (thisArtist == null) {
-            thisArtist = UNKOWN
-        }
-        var thisAlbum = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)
-        if (thisAlbum == null) {
-            thisAlbum = UNKOWN
-        }
-        if (!mArtistAlbumDb.containsKey(thisArtist)) {
-            mArtistAlbumDb[thisArtist] = ConcurrentHashMap()
-        }
-        val albumsMap = mArtistAlbumDb[thisArtist]
         TODO("一堆逻辑")
     }
 }

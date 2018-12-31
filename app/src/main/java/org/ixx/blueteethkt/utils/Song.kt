@@ -6,24 +6,24 @@ import android.os.Parcelable
 
 class Song(val songId: Long, var metadata: MediaMetadata, var sortKey: Long?) : Parcelable {
 
-    override fun equals(o: Any?): Boolean {
-        if (this == o) return true
-        if (o == null || o !is Song) return false
-        return songId == o.songId
+    override fun equals(other: Any?): Boolean {
+        if (this == other) return true
+        if (other == null || other !is Song) return false
+        return songId == other.songId
     }
 
     override fun hashCode(): Int {
         return songId.hashCode()
     }
 
-    override fun describeContents(): Int {
-        return 0
+    override fun writeToParcel(parcel: Parcel, flags: Int) {
+        sortKey?.let { parcel.writeLong(it) }
+        parcel.writeLong(songId)
+        parcel.writeParcelable(metadata, flags)
     }
 
-    override fun writeToParcel(out: Parcel?, flags: Int) {
-        sortKey?.let { out?.writeLong(it) }
-        out?.writeLong(songId)
-        out?.writeParcelable(metadata, flags)
+    override fun describeContents(): Int {
+        return 0
     }
 
     companion object CREATOR : Parcelable.Creator<Song> {

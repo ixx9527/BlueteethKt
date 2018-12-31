@@ -4,33 +4,35 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.MediaPlayer
-import android.media.session.PlaybackState
-import android.util.Log
-import org.ixx.blueteethkt.MediaPlaybackService
 import android.media.AudioManager
+import android.media.MediaPlayer
 import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.wifi.WifiManager
 import android.os.PowerManager
 import android.text.TextUtils
+import android.util.Log
+import org.ixx.blueteethkt.MediaPlaybackService
 
 
 class Playback(val service: MediaPlaybackService, val musicProvider: MusicProvider?) : AudioManager.OnAudioFocusChangeListener,
         MediaPlayer.OnSeekCompleteListener, MediaPlayer.OnCompletionListener, MediaPlayer.OnPreparedListener, MediaPlayer.OnErrorListener {
     private val TAG = LogHelper.makeLogTag(Playback::class.java)
 
-    // The volume we set the media player to when we lose audio focus, but are
-    // allowed to reduce the volume instead of stopping playback.
-    val VOLUME_DUCK = 0.2f
-    // The volume we set the media player when we have audio focus.
-    val VOLUME_NORMAL = 1.0f
+    companion object {
+        // The volume we set the media player to when we lose audio focus, but are
+        // allowed to reduce the volume instead of stopping playback.
+        const val VOLUME_DUCK = 0.2f
+        // The volume we set the media player when we have audio focus.
+        const val VOLUME_NORMAL = 1.0f
 
-    // we don't have audio focus, and can't duck (play at a low volume)
-    private val AUDIO_NO_FOCUS_NO_DUCK = 0
-    // we don't have focus, but can duck (play at a low volume)
-    private val AUDIO_NO_FOCUS_CAN_DUCK = 1
-    // we have full audio focus
-    private val AUDIO_FOCUSED = 2
+        // we don't have audio focus, and can't duck (play at a low volume)
+        private const val AUDIO_NO_FOCUS_NO_DUCK = 0
+        // we don't have focus, but can duck (play at a low volume)
+        private const val AUDIO_NO_FOCUS_CAN_DUCK = 1
+        // we have full audio focus
+        private const val AUDIO_FOCUSED = 2
+    }
 
     // property
     var state: Int = 0
